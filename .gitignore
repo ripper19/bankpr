@@ -1,0 +1,27 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+.env
+.cfg
+test.py
+bank_virt_env/
+*.egg-info/
+config.py
+secrets.py
+__pycache__/
+*.py[cod]
+venv/
+env/
+*.venv/
+*.db
+*.sqlite
+*.sqlite3
+.vscode/
+.idea/
+*.swp
+*.swo
+dist/
+build/
+*.egg-info/
+*.log
+logs/
+.DS_Store
+Thumbs.db
