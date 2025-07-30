@@ -6,8 +6,6 @@ import random
 import psycopg2
 from .exceptions import DatabaseError,accountexistserror,createAccountError
 import logging
-from core.checking import checking_Account
-from core.savings import savings_Account
 load_dotenv()
 
 class Bank:
@@ -75,6 +73,7 @@ class Bank:
                 raise createAccountError(f"Cant perform action {e.pgcode}: {e.pgerror}")
 
     def get_account(self, acc_num):
+        from core.accounts import Account
         with self.gen_lock:
             try:
                 self.cursor.execute(
@@ -86,13 +85,7 @@ class Bank:
                     raise ValueError("No account!!")
                 
                 account_type , balance = row
-
-                if account_type == "Checking account":
-                    return checking_Account(acc_num, balance)
-                elif account_type == "Savings account":
-                    return savings_Account(acc_num, balance)
-                else:
-                    raise ValueError(f"Invalid account type {account_type}")
+                return Account.sortaccount(acc_num, balance, account_type)
             except psycopg2.Error as e:
                 self.post.rollback()
                 raise DatabaseError(f"Unable to access database {e.pgerror}")
@@ -101,8 +94,6 @@ class Bank:
         with self.gen_lock:
             try:
                 account = self.get_account(acc_num)
-                if not account:
-                    raise ValueError(f"No account for {acc_num}")
                 new_balance = account.withdraw(amount)
 
                 self.cursor.execute(
@@ -114,3 +105,27 @@ class Bank:
                 self.post.rollback()
                 self.log_error(f"error {str(e)}")
                 raise 
+    def transfers(self, from_acc_num, to_acc_num, amount):
+        with self.gen_lock:
+            try:
+                creditor = self.get_account(from_acc_num)
+                debitor = self.get_account(to_acc_num)
+
+                if creditor.balance < amount :
+                    raise ValueError("Not enough money")
+                
+                source_balance = creditor.withdraw(amount)
+                target_balance = debitor.Deposit(amount)
+
+                self.cursor.execute(
+                    "UPDATE accounts SET balance = %s WHERE account_number = %s", (source_balance, creditor,)
+                )
+                self.cursor.execute(
+                    "UPDATE accounts SET balance = %s WHERE account_number = %s", (target_balance, debitor,)
+                )
+                self.post.commit()
+                return source_balance
+            except Exception as e:
+                self.post.rollback()
+                self.log_error(f"error {str(e)}")
+                raise

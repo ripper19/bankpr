@@ -6,6 +6,7 @@ class MainPage:
     def __init__(self):
         self.root =tk.Tk()
         self.root.title("Bankbank")
+        self.root.geometry("400x300")
         self.setInterface()
 
     def setInterface(self):
