@@ -10,7 +10,7 @@ class Account(ABC):
             pass
 
         def Deposit(self, amount):
-            self.balance += amount
+            self.balance += float(amount)
             return self.balance
         
         @staticmethod
@@ -20,7 +20,6 @@ class Account(ABC):
                     return checking_Account(acc_num, balance)
               elif account_type == "Savings account":
                     from core.savings import savings_Account
-
                     return savings_Account(acc_num, balance)
               else:
                     raise ValueError(f"Cannot find this {account_type}")

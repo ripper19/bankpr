@@ -111,17 +111,17 @@ class Bank:
                 creditor = self.get_account(from_acc_num)
                 debitor = self.get_account(to_acc_num)
 
-                if creditor.balance < amount :
+                if creditor.balance < float(amount) :
                     raise ValueError("Not enough money")
                 
                 source_balance = creditor.withdraw(amount)
                 target_balance = debitor.Deposit(amount)
 
                 self.cursor.execute(
-                    "UPDATE accounts SET balance = %s WHERE account_number = %s", (source_balance, creditor,)
+                    "UPDATE accounts SET balance = %s WHERE account_number = %s", (source_balance, creditor.acc_num,)
                 )
                 self.cursor.execute(
-                    "UPDATE accounts SET balance = %s WHERE account_number = %s", (target_balance, debitor,)
+                    "UPDATE accounts SET balance = %s WHERE account_number = %s", (target_balance, debitor.acc_num,)
                 )
                 self.post.commit()
                 return source_balance
