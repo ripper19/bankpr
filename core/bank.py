@@ -72,44 +72,80 @@ class Bank:
                 self.post.rollback()
                 raise createAccountError(f"Cant perform action {e.pgcode}: {e.pgerror}")
 
-    def get_account(self, acc_num):
+    def get_check_account(self, acc_num):
         from core.accounts import Account
         with self.gen_lock:
             try:
                 self.cursor.execute(
-                    "SELECT account_type,balance FROM accounts WHERE account_number = %s",(acc_num,)
+                    "SELECT account_type, balance FROM accounts WHERE account_number = %s AND account_type = 'Checking account'",(acc_num,)
                     )
                 row = self.cursor.fetchone()
 
                 if not row:
-                    raise ValueError("No account!!")
+                    return None
                 
                 account_type , balance = row
+                print(acc_num, balance, account_type)
                 return Account.sortaccount(acc_num, balance, account_type)
+            
             except psycopg2.Error as e:
                 self.post.rollback()
                 raise DatabaseError(f"Unable to access database {e.pgerror}")
+            
+    def get_savings_account(self, acc_num):
+        from core.accounts import Account
+        with self.gen_lock:
+            try:
+                self.cursor.execute(
+                    "SELECT account_type, balance, pending_withdrawal,release_date FROM accounts WHERE account_number = %s AND account_type = 'Savings account'",(acc_num,)
+                )
+                row = self.cursor.fetchone()
+                if not row:
+                    return None
+                
+                account_type, balance,pending_withdrawal,release_date = row
+                print(account_type,balance,pending_withdrawal,release_date)
+                return Account.sortaccount(acc_num, balance,account_type,pending_withdrawal,release_date)
+            except psycopg2.Error as e:
+                self.post.rollback()
+                raise DatabaseError(f"Cant access db {e.pgerror}")
 
     def withdraw(self, acc_num, amount):
         with self.gen_lock:
             try:
-                account = self.get_account(acc_num)
-                new_balance = account.withdraw(amount)
+                check = self.get_check_account(acc_num)
+                if check and check.account_type == "Checking account":
+                    new_balance = check.withdraw(amount)
+                    self.cursor.execute(
+                        "UPDATE accounts SET balance = %s WHERE account_number = %s RETURNING balance",(new_balance,acc_num,)
+                    )
 
-                self.cursor.execute(
-                "UPDATE accounts SET balance = %s WHERE account_number = %s",(new_balance, acc_num,)
-                )
-                self.post.commit()
-                return new_balance
-            except Exception as e:
+                    ded_balance = self.cursor.fetchone()[0]
+                    self.post.commit()
+                    return ded_balance
+                else:
+                    save = self.get_savings_account(acc_num)
+                    if save:
+                        new_details = save.request_withdraw(amount)
+                        if new_details is False:
+                            raise ValueError("Insufficient funds or No requested withdraw")
+                        else:
+                            amount, release_date = new_details
+                            self.cursor.execute(
+                                "UPDATE accounts SET pending_withdrawal = %s,release_date =%s WHERE account_number = %s RETURNING release_date",(amount,release_date,acc_num)
+                                )
+                            updated_dets = self.cursor.fetchone()[0]
+                            self.post.commit()
+                            return updated_dets
+            except psycopg2.Error as e:
                 self.post.rollback()
                 self.log_error(f"error {str(e)}")
-                raise 
+                raise DatabaseError(f"cant access db {e.pgerror}")
     def transfers(self, from_acc_num, to_acc_num, amount):
         with self.gen_lock:
             try:
-                creditor = self.get_account(from_acc_num)
-                debitor = self.get_account(to_acc_num)
+                creditor = self.get_check_account(from_acc_num)
+                debitor = self.get_check_account(to_acc_num)
 
                 if creditor.balance < float(amount) :
                     raise ValueError("Not enough money")
